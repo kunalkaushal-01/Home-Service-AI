@@ -1,0 +1,14 @@
+env
+__pycache__
+migrations
+*.pyc
+.env
+*.log
+*.zip
+celerybeat-schedule
+dummy.py
+products.json
+vectors
+*.pkl
+*.faiss
+future_task.py
