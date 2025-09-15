@@ -128,122 +128,272 @@ def to_bool(value):
 
 
 # --------- Celery Tasks ----------
+# @celery_app.task(name='process_json_data')
+# def process_json_data():
+#     """Process JSON and save to DB + Weaviate vector store"""
+#     try:
+#         print("🔄 Starting JSON processing task...")
+#         Base.metadata.create_all(bind=engine)
+
+#         get_resp = product_call_api()
+#         data = get_resp.get("data", {})
+#         records = data.get("records", [])
+
+#         db = SessionLocal()
+#         processed_count = 0
+#         updated_count = 0
+#         weaviate_added = 0
+    
+#         for record in records:
+#             print(record,'check record')
+#             try:
+#                 brand = record.get("brand")
+#                 categories = record.get("categories", [])
+#                 domains = record.get("domains", [])
+#                 features_dict = {f['key']: f['value'] for f in record.get("features", [])}
+
+#                 title = features_dict.get("Title", [""])[0]
+#                 description_html = features_dict.get("body html", [""])[0]
+#                 description_text = BeautifulSoup(description_html, "html.parser").get_text(separator="\n").strip()
+#                 tags = features_dict.get("tags", [])
+#                 images = record.get("imageURLs", [])
+#                 keys = record.get("keys", [])
+
+#                 phone_price = record.get("prices", [])
+#                 filtered_prices = [
+#                     {
+#                         "amountMin": price.get("amountMin"),
+#                         "amountMax": price.get("amountMax"),
+#                         "availability": to_bool(price.get("availability")),
+#                         "currency": price.get("currency")
+#                     } for price in phone_price
+#                 ]
+
+#                 most_recent_price_amount = record.get("mostRecentPriceAmount")
+#                 most_recent_price_availability = to_bool(record.get("mostRecentPriceAvailability"))
+#                 most_recent_price_currency = record.get("mostRecentPriceCurrency")
+#                 most_recent_price_domain = record.get("mostRecentPriceDomain")
+#                 most_recent_price_first_seen = record.get("mostRecentPriceFirstDateSeen")
+#                 phone_name = record.get('name')
+#                 source_url = record.get("sourceURLs", [""])[0]
+
+#                 product_obj = db.query(Product).filter(Product.id == record['id']).first()
+#                 if product_obj:
+#                     product_obj.phone_name = phone_name
+#                     product_obj.brand = brand
+#                     product_obj.category = categories
+#                     product_obj.domains = domains
+#                     product_obj.title = title
+#                     product_obj.description = description_text
+#                     product_obj.tags = tags
+#                     product_obj.images = images
+#                     product_obj.keys = keys
+#                     product_obj.filtered_prices = filtered_prices
+#                     product_obj.most_recent_price_amount = most_recent_price_amount
+#                     product_obj.most_recent_price_availability = most_recent_price_availability
+#                     product_obj.most_recent_price_currency = most_recent_price_currency
+#                     product_obj.most_recent_price_domain = most_recent_price_domain
+#                     product_obj.most_recent_price_first_seen = most_recent_price_first_seen
+#                     product_obj.is_processed = False
+#                     updated_count += 1
+#                 else:
+#                     product_obj = Product(
+#                         id=record['id'],
+#                         phone_name=phone_name,
+#                         brand=brand,
+#                         category=categories,
+#                         domains=domains,
+#                         title=title,
+#                         description=description_text,
+#                         tags=tags,
+#                         images=images,
+#                         keys=keys,
+#                         filtered_prices=filtered_prices,
+#                         most_recent_price_amount=most_recent_price_amount,
+#                         most_recent_price_availability=most_recent_price_availability,
+#                         most_recent_price_currency=most_recent_price_currency,
+#                         most_recent_price_domain=most_recent_price_domain,
+#                         most_recent_price_first_seen=most_recent_price_first_seen,
+#                         is_processed=False
+#                     )
+#                     db.add(product_obj)
+#                     db.flush()
+#                     processed_count += 1
+
+#                 # ---- Insert into Weaviate ----
+#                 if not product_obj.is_processed:
+#                     vector = get_embedding(f"{title} {brand} {description_text} {' '.join(tags)}")
+#                     collection.data.insert(
+#                         properties={
+#                             "brand": brand,
+#                             "categories": categories,
+#                             "title": title,
+#                             "description": description_text,
+#                             "tags": tags,
+#                             "imageURLs": images,
+#                             "price": most_recent_price_amount,
+#                             "currency": most_recent_price_currency,
+#                             "availability": str(most_recent_price_availability),
+#                             "source_url": source_url,
+#                         },
+#                         vector=vector
+#                     )
+#                     product_obj.is_processed = True
+#                     weaviate_added += 1
+
+#             except Exception as e:
+#                 print(f"❌ Error processing record {record.get('id', 'unknown')}: {e}")
+#                 continue
+
+#         db.commit()
+#         total_processed = processed_count + updated_count
+#         result_msg = f"Processed: {total_processed} (New: {processed_count}, Updated: {updated_count}), Weaviate added vectors: {weaviate_added}"
+#         print(f"✅ {result_msg}")
+
+#         return {
+#             "status": "success",
+#             "new_products": processed_count,
+#             "updated_products": updated_count,
+#             "weaviate_added": weaviate_added,
+#             "message": result_msg
+#         }
+
+#     except Exception as e:
+#         try:
+#             db.rollback()
+#         except:
+#             pass
+#         error_msg = f"JSON processing failed: {str(e)}"
+#         print(f"❌ {error_msg}")
+#         return {"status": "error", "message": error_msg}
+#     finally:
+#         try:
+#             db.close()
+#         except:
+#             pass
+
 @celery_app.task(name='process_json_data')
 def process_json_data():
-    """Process JSON and save to DB + Weaviate vector store"""
+    """Process multiple products from API and save to DB + Weaviate vector store"""
     try:
         print("🔄 Starting JSON processing task...")
         Base.metadata.create_all(bind=engine)
 
-        get_resp = product_call_api()
-        data = get_resp.get("data", {})
-        records = data.get("records", [])
+        get_resps = product_call_api()  # returns dict: { "iphone": {...}, "washingmachine": {...}, ... }
 
         db = SessionLocal()
         processed_count = 0
         updated_count = 0
         weaviate_added = 0
 
-        for record in records:
-            print(record,'check record')
-            try:
-                brand = record.get("brand")
-                categories = record.get("categories", [])
-                domains = record.get("domains", [])
-                features_dict = {f['key']: f['value'] for f in record.get("features", [])}
-
-                title = features_dict.get("Title", [""])[0]
-                description_html = features_dict.get("body html", [""])[0]
-                description_text = BeautifulSoup(description_html, "html.parser").get_text(separator="\n").strip()
-                tags = features_dict.get("tags", [])
-                images = record.get("imageURLs", [])
-                keys = record.get("keys", [])
-
-                phone_price = record.get("prices", [])
-                filtered_prices = [
-                    {
-                        "amountMin": price.get("amountMin"),
-                        "amountMax": price.get("amountMax"),
-                        "availability": to_bool(price.get("availability")),
-                        "currency": price.get("currency")
-                    } for price in phone_price
-                ]
-
-                most_recent_price_amount = record.get("mostRecentPriceAmount")
-                most_recent_price_availability = to_bool(record.get("mostRecentPriceAvailability"))
-                most_recent_price_currency = record.get("mostRecentPriceCurrency")
-                most_recent_price_domain = record.get("mostRecentPriceDomain")
-                most_recent_price_first_seen = record.get("mostRecentPriceFirstDateSeen")
-                phone_name = record.get('name')
-                source_url = record.get("sourceURLs", [""])[0]
-
-                product_obj = db.query(Product).filter(Product.id == record['id']).first()
-                if product_obj:
-                    product_obj.phone_name = phone_name
-                    product_obj.brand = brand
-                    product_obj.category = categories
-                    product_obj.domains = domains
-                    product_obj.title = title
-                    product_obj.description = description_text
-                    product_obj.tags = tags
-                    product_obj.images = images
-                    product_obj.keys = keys
-                    product_obj.filtered_prices = filtered_prices
-                    product_obj.most_recent_price_amount = most_recent_price_amount
-                    product_obj.most_recent_price_availability = most_recent_price_availability
-                    product_obj.most_recent_price_currency = most_recent_price_currency
-                    product_obj.most_recent_price_domain = most_recent_price_domain
-                    product_obj.most_recent_price_first_seen = most_recent_price_first_seen
-                    product_obj.is_processed = False
-                    updated_count += 1
-                else:
-                    product_obj = Product(
-                        id=record['id'],
-                        phone_name=phone_name,
-                        brand=brand,
-                        category=categories,
-                        domains=domains,
-                        title=title,
-                        description=description_text,
-                        tags=tags,
-                        images=images,
-                        keys=keys,
-                        filtered_prices=filtered_prices,
-                        most_recent_price_amount=most_recent_price_amount,
-                        most_recent_price_availability=most_recent_price_availability,
-                        most_recent_price_currency=most_recent_price_currency,
-                        most_recent_price_domain=most_recent_price_domain,
-                        most_recent_price_first_seen=most_recent_price_first_seen,
-                        is_processed=False
-                    )
-                    db.add(product_obj)
-                    db.flush()
-                    processed_count += 1
-
-                # ---- Insert into Weaviate ----
-                if not product_obj.is_processed:
-                    vector = get_embedding(f"{title} {brand} {description_text} {' '.join(tags)}")
-                    collection.data.insert(
-                        properties={
-                            "brand": brand,
-                            "categories": categories,
-                            "title": title,
-                            "description": description_text,
-                            "tags": tags,
-                            "imageURLs": images,
-                            "price": most_recent_price_amount,
-                            "currency": most_recent_price_currency,
-                            "availability": str(most_recent_price_availability),
-                            "source_url": source_url,
-                        },
-                        vector=vector
-                    )
-                    product_obj.is_processed = True
-                    weaviate_added += 1
-
-            except Exception as e:
-                print(f"❌ Error processing record {record.get('id', 'unknown')}: {e}")
+        # Loop through each product keyword
+        for prod_name, result in get_resps.items():
+            if result.get("status") != "success":
+                print(f"❌ Error fetching product {prod_name}: {result.get('details')}")
                 continue
+
+            records = result.get("data", {}).get("records", [])
+            for record in records:
+                try:
+                    brand = record.get("brand")
+                    categories = record.get("categories", [])
+                    domains = record.get("domains", [])
+                    features_dict = {f['key']: f['value'] for f in record.get("features", [])}
+
+                    title = features_dict.get("Title", [""])[0]
+                    description_html = features_dict.get("body html", [""])[0]
+                    description_text = BeautifulSoup(description_html, "html.parser").get_text(separator="\n").strip()
+                    tags = features_dict.get("tags", [])
+                    images = record.get("imageURLs", [])
+                    keys = record.get("keys", [])
+
+                    phone_price = record.get("prices", [])
+                    filtered_prices = [
+                        {
+                            "amountMin": price.get("amountMin"),
+                            "amountMax": price.get("amountMax"),
+                            "availability": to_bool(price.get("availability")),
+                            "currency": price.get("currency")
+                        } for price in phone_price
+                    ]
+
+                    most_recent_price_amount = record.get("mostRecentPriceAmount")
+                    most_recent_price_availability = to_bool(record.get("mostRecentPriceAvailability"))
+                    most_recent_price_currency = record.get("mostRecentPriceCurrency")
+                    most_recent_price_domain = record.get("mostRecentPriceDomain")
+                    most_recent_price_first_seen = record.get("mostRecentPriceFirstDateSeen")
+                    phone_name = record.get('name')
+                    source_url = record.get("sourceURLs", [""])[0]
+
+                    product_obj = db.query(Product).filter(Product.id == record['id']).first()
+                    if product_obj:
+                        # Update existing product
+                        product_obj.phone_name = phone_name
+                        product_obj.brand = brand
+                        product_obj.category = categories
+                        product_obj.domains = domains
+                        product_obj.title = title
+                        product_obj.description = description_text
+                        product_obj.tags = tags
+                        product_obj.images = images
+                        product_obj.keys = keys
+                        product_obj.filtered_prices = filtered_prices
+                        product_obj.most_recent_price_amount = most_recent_price_amount
+                        product_obj.most_recent_price_availability = most_recent_price_availability
+                        product_obj.most_recent_price_currency = most_recent_price_currency
+                        product_obj.most_recent_price_domain = most_recent_price_domain
+                        product_obj.most_recent_price_first_seen = most_recent_price_first_seen
+                        product_obj.is_processed = False
+                        updated_count += 1
+                    else:
+                        # Add new product
+                        product_obj = Product(
+                            id=record['id'],
+                            phone_name=phone_name,
+                            brand=brand,
+                            category=categories,
+                            domains=domains,
+                            title=title,
+                            description=description_text,
+                            tags=tags,
+                            images=images,
+                            keys=keys,
+                            filtered_prices=filtered_prices,
+                            most_recent_price_amount=most_recent_price_amount,
+                            most_recent_price_availability=most_recent_price_availability,
+                            most_recent_price_currency=most_recent_price_currency,
+                            most_recent_price_domain=most_recent_price_domain,
+                            most_recent_price_first_seen=most_recent_price_first_seen,
+                            is_processed=False
+                        )
+                        db.add(product_obj)
+                        db.flush()
+                        processed_count += 1
+
+                    # ---- Insert into Weaviate ----
+                    if not product_obj.is_processed:
+                        vector = get_embedding(f"{title} {brand} {description_text} {' '.join(tags)}")
+                        collection.data.insert(
+                            properties={
+                                "brand": brand,
+                                "categories": categories,
+                                "title": title,
+                                "description": description_text,
+                                "tags": tags,
+                                "imageURLs": images,
+                                "price": most_recent_price_amount,
+                                "currency": most_recent_price_currency,
+                                "availability": str(most_recent_price_availability),
+                                "source_url": source_url,
+                            },
+                            vector=vector
+                        )
+                        product_obj.is_processed = True
+                        weaviate_added += 1
+
+                except Exception as e:
+                    print(f"❌ Error processing record {record.get('id', 'unknown')}: {e}")
+                    continue
 
         db.commit()
         total_processed = processed_count + updated_count

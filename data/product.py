@@ -39,43 +39,47 @@ def product_call_api():
         "accept": "application/json",
         "content-type": "application/json"
     }
-    product_name ='Iphone'
-    print(product_name)
-    payload = {"query": f"brand:{product_name}"}
+    # product_name ='Iphone'
+    product_name = ['iphone','washingmachine','laptop','lcd','tv']
+    results = {}
+    for prod in product_name:
+        print(prod)
+        payload = {"query": f"brand:{prod}"}
 
-    try:
-        response = requests.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        return {
-            "status": "success",
-            "data": data,
-        }
-    except requests.exceptions.HTTPError as http_err:
-        return {
-            "status": "error",
-            "message": "HTTP error occurred",
-            "details": str(http_err)
-        }
-    except requests.exceptions.ConnectionError as conn_err:
-        return {
-            "status": "error",
-            "message": "Connection error occurred",
-            "details": str(conn_err)
-        }
-    except requests.exceptions.Timeout as timeout_err:
-        return {
-            "status": "error",
-            "message": "Request timed out",
-            "details": str(timeout_err)
-        }
-    except requests.exceptions.RequestException as req_err:
-        return {
-            "status": "error",
-            "message": "An error occurred",
-            "details": str(req_err)
-        }
-
+        try:
+            response = requests.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            results[prod] = {"status": "success", "data": data}
+            # return {
+            #     "status": "success",
+            #     "data": data,
+            # }
+        except requests.exceptions.HTTPError as http_err:
+            return {
+                "status": "error",
+                "message": "HTTP error occurred",
+                "details": str(http_err)
+            }
+        except requests.exceptions.ConnectionError as conn_err:
+            return {
+                "status": "error",
+                "message": "Connection error occurred",
+                "details": str(conn_err)
+            }
+        except requests.exceptions.Timeout as timeout_err:
+            return {
+                "status": "error",
+                "message": "Request timed out",
+                "details": str(timeout_err)
+            }
+        except requests.exceptions.RequestException as req_err:
+            return {
+                "status": "error",
+                "message": "An error occurred",
+                "details": str(req_err)
+            }
+    return results
 # q = "washing machine"
 # q = "iPhone 11"
 # result = product_call_api(q)
