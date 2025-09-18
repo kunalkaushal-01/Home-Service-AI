@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from config import SessionLocal, Base, engine
+# from config import SessionLocal, Base, engine
 from sqlalchemy import create_engine
 
 # GEMINI_API_KEY="AIzaSyD9-JNP-rXqU0KLkRO5YiLUBdAX7CmeNbM"
@@ -458,7 +458,7 @@ agent_executor = AgentExecutor(
     tools=tools,
     verbose=False,
     handle_parsing_errors=True,
-    max_iterations=2,
+    max_iterations=3,
     early_stopping_method="force",
     return_intermediate_steps=False
 )
