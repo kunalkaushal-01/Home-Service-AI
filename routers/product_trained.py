@@ -94,7 +94,26 @@ from data.product import product_call_api
 #             status_code=500,
 #             detail="Internal server error. Please try again later."
 #         )
+from data.index import agent_executor
 
+@router.post("/agent_chatbot")
+def agent_chatbot(user_input: str = Form(...), user_id: Optional[str] = Form(None)):
+    """
+    Chatbot API that uses an agent to process user queries and return a Markdown response.
+    """
+    try:
+        # Pass the user query directly to the agent executor
+        response = agent_executor.invoke({"input": user_input})
+        
+        # The agent's final output will be in Markdown format
+        return {
+            "status": "success",
+            "message": response['output'],
+            "user_id": user_id if user_id else str(uuid4())
+        }
+    
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @router.post("/chatbot")
 def chatbot(

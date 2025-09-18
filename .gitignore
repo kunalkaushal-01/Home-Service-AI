@@ -12,4 +12,4 @@ vectors
 *.pkl
 *.faiss
 future_task.py
-readme.md
+README.md
