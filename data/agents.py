@@ -172,38 +172,45 @@ def handle_smalltalk(user_input: str) -> str | None:
 
 # Determine which agent to use based on keywords
 def route_query(user_input: str) -> str:
-    clean_inut = sanitize_input(user_input)
-    product_keywords = ["buy", "price", "product", "appliance", "clothing", "electronics", "furniture", "lawn", "tools", "sports"]
-    service_keywords = ["install", "repair", "delivery", "home service", "contractor", "tutor", "mechanic", "nurse", "trainer"]
-    car_keywords = ["car", "auto", "vehicle", "dealer", "used car", "new car","Auto Insurance", "Car Loan", "Car Lease", "Car Warranty", "Car Rental", "Car Repair", "Car Maintenance", "Car Detailing", "Car Accessories","Car Parts", "Car Financing", "Car Trade-In", "Car Inspection", "Car Title", "Car Registration","Finance", "Insurance", "Lease", "Warranty", "Rental", "Repair", "Maintenance", "Detailing", "Accessories","Parts", "Trade-In", "Inspection", "Title", "Registration"]
+    try:
+        clean_inut = sanitize_input(user_input)
+        product_keywords = ["buy", "price", "product", "appliance", "clothing", "electronics", "furniture", "lawn", "tools", "sports"]
+        service_keywords = ["install", "repair", "delivery", "home service", "contractor", "tutor", "mechanic", "nurse", "trainer"]
+        car_keywords = ["car", "auto", "vehicle", "dealer", "used car", "new car","Auto Insurance", "Car Loan", "Car Lease", "Car Warranty", "Car Rental", "Car Repair", "Car Maintenance", "Car Detailing", "Car Accessories","Car Parts", "Car Financing", "Car Trade-In", "Car Inspection", "Car Title", "Car Registration","Finance", "Insurance", "Lease", "Warranty", "Rental", "Repair", "Maintenance", "Detailing", "Accessories","Parts", "Trade-In", "Inspection", "Title", "Registration"]
 
-    input_lower = clean_inut.lower()
-    if any(word in input_lower for word in product_keywords):
-        return agent_products.invoke({"input": user_input})["output"]
-    elif any(word in input_lower for word in service_keywords):
-        print("Routing to services agent")
-        return agent_services.invoke({"input": user_input})["output"]
-    elif any(word in input_lower for word in car_keywords):
-        print("Routing to autos agent")
-        return agent_autos.invoke({"input": user_input}).get("output") or agent_autos.invoke({"input": user_input})
-    else:
-        # Default to products if unclear
-        return agent_products.invoke({"input": user_input})["output"]
+        input_lower = clean_inut.lower()
+        if any(word in input_lower for word in product_keywords):
+            return agent_products.invoke({"input": user_input})["output"]
+        elif any(word in input_lower for word in service_keywords):
+            print("Routing to services agent")
+            return agent_services.invoke({"input": user_input})["output"]
+        elif any(word in input_lower for word in car_keywords):
+            print("Routing to autos agent")
+            return agent_autos.invoke({"input": user_input}).get("output") or agent_autos.invoke({"input": user_input})
+        else:
+            # Default to products if unclear
+            return agent_products.invoke({"input": user_input})["output"]
+        
+    except Exception as e:
+        return f"Sorry, Server is Busy Can you try after Some Time: {str(e)}"
 
-# ✅ Interactive loop
-if __name__ == "__main__":
-    while True:
-        query = input("You: ")
-        if query.lower() in ["exit", "quit"]:
-            break
-        bot_chat = handle_smalltalk(query)
-        if bot_chat:
-            print(bot_chat)
-            continue
-        response = route_query(query)
-        print(response)
+# # ✅ Interactive loop
+# if __name__ == "__main__":
+#     while True:
+#         query = input("You: ")
+#         if query.lower() in ["exit", "quit"]:
+#             break
+#         bot_chat = handle_smalltalk(query)
+#         if bot_chat:
+#             print(bot_chat)
+#             continue
+#         response = route_query(query)
+#         print(response)
 
 
+
+
+#inprocess this code
 # import os
 # import sys
 # from dotenv import load_dotenv
