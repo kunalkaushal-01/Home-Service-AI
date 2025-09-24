@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from routers import product_trained
-from data import product_agent
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
