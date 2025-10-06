@@ -56,6 +56,7 @@ def agent_chatbot(user_input: str = Form(...), user_id: Optional[str] = Form(Non
         return {"status": "error", "message": str(e)}
 
 
+CONVERSATIONS = {}
 
 def create_client(api_key: str) -> genai.Client:
     return genai.Client(api_key=api_key)
@@ -68,31 +69,102 @@ def clean_json_output(text: str):
     cleaned = re.sub(r"^```|```$", "", cleaned.strip(), flags=re.MULTILINE).strip()
     return cleaned
 
-def ask_product_insights(client: genai.Client, title: str, brand: str, price: str, reviews: int, description: str):
+# def ask_product_insights(client: genai.Client, title: str, brand: str, price: str, reviews: int, description: str):
+#     grounding_tool = types.Tool(google_search=types.GoogleSearch())
+#     config = types.GenerateContentConfig(tools=[grounding_tool])
+
+#     query = f"""
+#     Product details:
+#     Title: {title}
+#     Brand: {brand}
+#     Price: {price}
+#     Reviews: {reviews}
+#     Description: {description}
+
+#     Please return the answer ONLY as a JSON object with this format:
+#     {{
+#         "insights": "overall insights on pricing, reviews, and quality",
+#         "average_price": "market price range",
+#         "average_reviews": number,
+#         "quality_summary": "summary of build quality, durability, performance"
+#     }}
+#     Do not add markdown fences or explanations.
+#     """
+
+#     response = client.models.generate_content(
+#         model="gemini-2.5-flash",
+#         contents=query,
+#         config=config
+#     )
+
+#     raw_text = response.text
+#     try:
+#         clean_text = clean_json_output(raw_text)
+#         return json.loads(clean_text)
+#     except Exception:
+#         return {"raw_output": raw_text}  # fallback if still not valid JSON
+
+# def ask_product_insights(client: genai.Client, conversation_text: str):
+#     grounding_tool = types.Tool(google_search=types.GoogleSearch())
+#     config = types.GenerateContentConfig(tools=[grounding_tool])
+
+#     query = f"""
+#     You are a helpful product insights assistant.
+#     Here is the conversation so far:
+#     {conversation_text}
+
+#     Please return the answer ONLY as a JSON object in this format:
+#     {{
+#         "insights": "overall insights on pricing, reviews, and quality",
+#         "average_price": "market price range",
+#         "average_reviews": number,
+#         "pros": ["pro1", "pro2", "pro3"],
+#         "cons": ["con1", "con2", "con3"],
+#         "summary": "brief conversational response (under 100 words)"
+#     }}
+#     Do not include markdown fences or explanations.
+#     """
+
+#     response = client.models.generate_content(
+#         model="gemini-2.5-flash",
+#         contents=query,
+#         config=config
+#     )
+
+#     raw_text = response.text
+#     try:
+#         clean_text = clean_json_output(raw_text)
+#         return json.loads(clean_text)
+#     except Exception:
+#         return {"raw_output": raw_text}
+
+def ask_product_insights(client: genai.Client, conversation_text: str):
+    """Ask Gemini API for concise product insights with conversational context."""
     grounding_tool = types.Tool(google_search=types.GoogleSearch())
     config = types.GenerateContentConfig(tools=[grounding_tool])
 
-    query = f"""
-    Product details:
-    Title: {title}
-    Brand: {brand}
-    Price: {price}
-    Reviews: {reviews}
-    Description: {description}
+    prompt = f"""
+    You are an intelligent assistant that helps users analyze product details and provide short, structured responses.
 
-    Please return the answer ONLY as a JSON object with this format:
+    Below is the ongoing conversation context:
+    {conversation_text}
+
+    Now, based on the latest product details provided, please respond ONLY in JSON with this exact structure:
     {{
-        "insights": "overall insights on pricing, reviews, and quality",
-        "average_price": "market price range",
-        "average_reviews": number,
-        "quality_summary": "summary of build quality, durability, performance"
+        "rating": "<overall rating or sentiment out of 5>",
+        "average_price": "<typical or market price range>",
+        "pros": ["Top 3 pros only"],
+        "cons": ["Top 3 cons only"],
+        "summary": "<short conversational summary — no longer than 3 sentences>"
     }}
-    Do not add markdown fences or explanations.
+
+    Keep it concise and professional.
+    Do not include markdown or explanations.
     """
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=query,
+        contents=prompt,
         config=config
     )
 
@@ -101,11 +173,11 @@ def ask_product_insights(client: genai.Client, title: str, brand: str, price: st
         clean_text = clean_json_output(raw_text)
         return json.loads(clean_text)
     except Exception:
-        return {"raw_output": raw_text}  # fallback if still not valid JSON
-
+        return {"raw_output": raw_text}
 
 @router.post("/product-search")
 def product_search(
+    user_id: str = Form(...),
     title:str = Form(...),  
     description: str = Form(...),
     brand: str = Form(...),
@@ -113,17 +185,34 @@ def product_search(
     reviews: int = Form(...)
     ):
     """
-    Fetch product insights using Google Gemini API based on form data.
+    Conversational Product Insights API
+    - Each user_id maintains its own conversation history.
+    - If the same user_id sends another request, the chat continues.
     """
     try:
-        # api_key = "AIzaSyD9-JNP-rXqU0KLkRO5YiLUBdAX7CmeNbM"
+        
         api_key = os.getenv("GEMINI_API_KEY")
         if api_key is None:
             raise ValueError("GEMINI_API_KEY environment variable not set")
+            
         client = create_client(api_key)
-
-        result = ask_product_insights(client, title, brand, price, reviews, description)
-        return {"status": "success", "data": result}
+        if user_id not in CONVERSATIONS:
+            CONVERSATIONS[user_id] = []
+        user_message = f"Product details:\nTitle: {title}\nBrand: {brand}\nPrice: {price}\nReviews: {reviews}\nDescription: {description}"
+        CONVERSATIONS[user_id].append({"role": "user", "content": user_message})
+        # Convert history into text
+        conversation_text = "\n".join(
+            [f"{msg['role'].capitalize()}: {msg['content']}" for msg in CONVERSATIONS[user_id]]
+        )
+        result = ask_product_insights(client, conversation_text)
+        CONVERSATIONS[user_id].append({"role": "assistant", "content": json.dumps(result)})
+        # return {"status": "success", "data": result}
+        return {
+            "status": "success",
+            "user_id": user_id,
+            "data": result,
+            "conversation_length": len(CONVERSATIONS[user_id])
+        }
     except Exception as e:
         logging.error(f"Error fetching product insights: {e}")
         return {"status": "error", "message": str(e)}   
